@@ -9,6 +9,13 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.widget.Toast;
 
+import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
+import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
+
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 
 import nl.littlerobots.bean.*;
@@ -22,6 +29,8 @@ public class MainActivity extends ActionBarActivity {
      */
     private static final String TAG = "BeanTest2";
 
+    public Bean myBean;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -32,24 +41,24 @@ public class MainActivity extends ActionBarActivity {
             @Override
             public void onBeanDiscovered(Bean bean) {
                 BeanManager.getInstance().cancelDiscovery();
-                bean.disconnect();
+
                 Toast.makeText(getApplicationContext(), "Bean discovered - " + this, Toast.LENGTH_LONG).show();
                 Log.w(TAG, "Bean discovered - " + bean.getDevice());
                 bean.connect(getApplicationContext(), myBeanListener);
 
                 // after the connection is instantiated, briefly flash the led:
-                bean.setLed(255, 0, 0);
-                bean.setLed(0, 255, 0);
-                bean.setLed(0, 0, 255);
-                bean.setLed(0, 0, 0);
+                bean.setLed(255,0,0);
 
                 bean.readTemperature(new Callback<Integer>() {
                     @Override
                     public void onResult(Integer integer) {
                         Toast.makeText(getApplicationContext(), "Temperature: " + integer, Toast.LENGTH_LONG).show();
                         Log.w(TAG, "Temperature: " + integer);
+                        testMqtt(integer);
                     }
                 });
+
+                bean.setLed(0, 0, 0);
 
                 // when you're done, don't forget to disconnect
                 //bean.disconnect();
@@ -104,6 +113,54 @@ public class MainActivity extends ActionBarActivity {
 
         // Assuming "this" is an activity or service:
         BeanManager.getInstance().startDiscovery(listener);
+    }
+
+
+    public void testMqtt( int temperature) {
+        String topic = "test";
+        String content = "{\n" +
+                "  \"unitOfMeasure\": \"C\",\n" +
+                "  \"partitionId\": \"A1\",\n" +
+                "  \"measurementType\": \"temperature\",\n" +
+                "  \"timeCreated\": \"2015-04-02T07:28:43-03:00\",\n" +
+                "  \"organization\": \"NIOTH2015\",\n" +
+                "  \"guid\": \"b646c5a3-b873-4910-a1ee-53168daa3341\",\n" +
+                "  \"value\": "+temperature+",\n" +
+                "  \"sensorId\": \"bean3\",\n" +
+                "  \"modCamId\": \"A2\"\n" +
+                "}";
+        int qos = 2;
+        String broker = "tcp://mqtt.dev.mikael.io:1883";
+        String clientId = "AffectoO";
+        MemoryPersistence persistence = new MemoryPersistence();
+
+        try {
+            final MqttClient client = new MqttClient(broker, clientId, persistence);
+            final MqttConnectOptions opts = new MqttConnectOptions();
+            opts.setCleanSession(true);
+            System.out.printf("Connecting to broker: %s%n", broker);
+
+            client.connect(opts);
+            System.out.println("Connected");
+
+            System.out.printf("Publishing message: %s%n", content);
+            final MqttMessage message = new MqttMessage(content.getBytes(StandardCharsets.UTF_8));
+            message.setQos(qos);
+            client.publish(topic, message);
+            System.out.println("Message published");
+
+            client.disconnect();
+            System.out.println("Disconnected");
+
+            System.exit(0);
+        } catch (final MqttException me) {
+            System.out.println("reason " + me.getReasonCode());
+            System.out.println("msg " + me.getMessage());
+            System.out.println("loc " + me.getLocalizedMessage());
+            System.out.println("cause " + me.getCause());
+            System.out.println("excep " + me);
+            me.printStackTrace();
+        }
     }
 
     @Override
