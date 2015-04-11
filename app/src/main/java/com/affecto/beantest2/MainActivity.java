@@ -17,6 +17,9 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.TimeUnit;
 
 import nl.littlerobots.bean.*;
 import nl.littlerobots.bean.message.Callback;
@@ -40,6 +43,7 @@ public class MainActivity extends ActionBarActivity {
         BeanDiscoveryListener listener = new BeanDiscoveryListener() {
             @Override
             public void onBeanDiscovered(Bean bean) {
+                myBean = bean;
                 BeanManager.getInstance().cancelDiscovery();
 
                 Toast.makeText(getApplicationContext(), "Bean discovered - " + this, Toast.LENGTH_LONG).show();
@@ -47,18 +51,27 @@ public class MainActivity extends ActionBarActivity {
                 bean.connect(getApplicationContext(), myBeanListener);
 
                 // after the connection is instantiated, briefly flash the led:
-                bean.setLed(255,0,0);
+                myBean.setLed(128,0,0);
 
                 bean.readTemperature(new Callback<Integer>() {
                     @Override
                     public void onResult(Integer integer) {
+                        testMqtt(integer);
                         Toast.makeText(getApplicationContext(), "Temperature: " + integer, Toast.LENGTH_LONG).show();
                         Log.w(TAG, "Temperature: " + integer);
-                        testMqtt(integer);
+
+                        myBean.setLed(0, 128, 0);
+                           try {
+                               TimeUnit.SECONDS.sleep(1);
+                           } catch (InterruptedException e) {
+                               Thread.currentThread().interrupt();
+                           }
+                        myBean.setLed(0, 0, 0);
                     }
                 });
 
-                bean.setLed(0, 0, 0);
+
+
 
                 // when you're done, don't forget to disconnect
                 //bean.disconnect();
@@ -117,6 +130,7 @@ public class MainActivity extends ActionBarActivity {
 
 
     public void testMqtt( int temperature) {
+        myBean.setLed(128, 128, 0);
         String topic = "test";
         String content = "{\n" +
                 "  \"unitOfMeasure\": \"C\",\n" +
@@ -152,7 +166,6 @@ public class MainActivity extends ActionBarActivity {
             client.disconnect();
             System.out.println("Disconnected");
 
-            System.exit(0);
         } catch (final MqttException me) {
             System.out.println("reason " + me.getReasonCode());
             System.out.println("msg " + me.getMessage());
@@ -163,25 +176,4 @@ public class MainActivity extends ActionBarActivity {
         }
     }
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
-        }
-
-        return super.onOptionsItemSelected(item);
-    }
 }
