@@ -3,10 +3,6 @@ package com.affecto.beantest2;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
 import android.widget.Toast;
 
 import org.eclipse.paho.client.mqttv3.MqttClient;
@@ -16,10 +12,7 @@ import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Collection;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.TimeUnit;
+import java.util.Random;
 
 import nl.littlerobots.bean.*;
 import nl.littlerobots.bean.message.Callback;
@@ -28,11 +21,11 @@ import nl.littlerobots.bean.message.Callback;
 public class MainActivity extends ActionBarActivity {
 
     /**
-     * TAG = "BeanSDK". Used for debug messages.
+     * TAG = "BeanTest2". Used for debug messages.
      */
     private static final String TAG = "BeanTest2";
-
     public Bean myBean;
+    public Random rnd = new Random();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,74 +36,59 @@ public class MainActivity extends ActionBarActivity {
         BeanDiscoveryListener listener = new BeanDiscoveryListener() {
             @Override
             public void onBeanDiscovered(Bean bean) {
-                myBean = bean;
-                BeanManager.getInstance().cancelDiscovery();
-
-                Toast.makeText(getApplicationContext(), "Bean discovered - " + this, Toast.LENGTH_LONG).show();
-                Log.w(TAG, "Bean discovered - " + bean.getDevice());
+                Toast.makeText(getApplicationContext(), "onBeanDiscovered", Toast.LENGTH_LONG).show();
                 bean.connect(getApplicationContext(), myBeanListener);
-
-                // after the connection is instantiated, briefly flash the led:
-                myBean.setLed(128,0,0);
-
-                bean.readTemperature(new Callback<Integer>() {
-                    @Override
-                    public void onResult(Integer integer) {
-                        testMqtt(integer);
-                        Toast.makeText(getApplicationContext(), "Temperature: " + integer, Toast.LENGTH_LONG).show();
-                        Log.w(TAG, "Temperature: " + integer);
-
-                        myBean.setLed(0, 128, 0);
-                           try {
-                               TimeUnit.SECONDS.sleep(1);
-                           } catch (InterruptedException e) {
-                               Thread.currentThread().interrupt();
-                           }
-                        myBean.setLed(0, 0, 0);
-                    }
-                });
-
-
-
-
-                // when you're done, don't forget to disconnect
-                //bean.disconnect();
+                if (bean.getDevice().getAddress().equals("D0:39:72:C8:D4:72")) {
+                    myBean = bean;
+                    bean.setLed(rnd.nextInt(255), rnd.nextInt(255), rnd.nextInt(255));
+                    bean.setLed(0, 0, 0);
+                    myBean.readTemperature(new Callback<Integer>() {
+                        @Override
+                        public void onResult(Integer i) {
+                            testMqtt(i, 100);
+                            Toast.makeText(getApplicationContext(), "Temperature: " + i, Toast.LENGTH_LONG).show();
+                            Log.w(TAG, "Temperature: " + i);
+                        }
+                    });
+                } else {
+                    bean.disconnect();
+                }
+                if (myBean != null  ) {
+                    Log.w(TAG, "cancelDiscovery");
+                    BeanManager.getInstance().cancelDiscovery();
+                    onDiscoveryComplete();
+                }
             }
 
             @Override
             public void onDiscoveryComplete() {
-                int numbre = BeanManager.getInstance().getBeans().size();
-                Collection<Bean> beans = BeanManager.getInstance().getBeans();
-
-                Toast.makeText(getApplicationContext(), numbre + " Beans Found", Toast.LENGTH_LONG).show();
-                Log.w(TAG, numbre + " Beans Found");
-
+                int num = BeanManager.getInstance().getBeans().size();
+                Log.w(TAG, num + " Beans Found");
             }
 
             BeanListener myBeanListener = new BeanListener() {
                 @Override
                 public void onConnected() {
-                    Toast.makeText(getApplicationContext(), "CONNECTED TO BEAN", Toast.LENGTH_LONG).show();
+                    //Toast.makeText(getApplicationContext(), "CONNECTED TO BEAN", Toast.LENGTH_LONG).show();
                     Log.w(TAG, "CONNECTED TO BEAN");
-
                 }
 
                 @Override
                 public void onConnectionFailed() {
-                    Toast.makeText(getApplicationContext(), "CONNECTED FAILED", Toast.LENGTH_LONG).show();
+                    //Toast.makeText(getApplicationContext(), "CONNECTED FAILED", Toast.LENGTH_LONG).show();
                     Log.w(TAG, "CONNECTED FAILED");
                 }
 
                 @Override
                 public void onDisconnected() {
-                    Toast.makeText(getApplicationContext(), "BEAN DISCONNECTED", Toast.LENGTH_LONG).show();
+                    //Toast.makeText(getApplicationContext(), "BEAN DISCONNECTED", Toast.LENGTH_LONG).show();
                     Log.w(TAG, "BEAN DISCONNECTED");
                 }
 
                 @Override
                 public void onSerialMessageReceived(byte[] bytes) {
-                    Toast.makeText(getApplicationContext(), "Byte - " + bytes, Toast.LENGTH_LONG).show();
-                    Log.w(TAG, "Byte - " + bytes);
+                    /*Toast.makeText(getApplicationContext(), "Byte - " + bytes, Toast.LENGTH_LONG).show();
+                    Log.w(TAG, "Byte - " + bytes);*/
                 }
 
                 @Override
@@ -123,15 +101,11 @@ public class MainActivity extends ActionBarActivity {
                 }
             };
         };
-
-        // Assuming "this" is an activity or service:
         BeanManager.getInstance().startDiscovery(listener);
     }
 
-
-    public void testMqtt( int temperature) {
-        myBean.setLed(128, 128, 0);
-        String topic = "test";
+    public void testMqtt(int temperature, int sensorId) {
+        String topic = "tempevents";
         String content = "{\n" +
                 "  \"unitOfMeasure\": \"C\",\n" +
                 "  \"partitionId\": \"A1\",\n" +
@@ -139,13 +113,13 @@ public class MainActivity extends ActionBarActivity {
                 "  \"timeCreated\": \"2015-04-02T07:28:43-03:00\",\n" +
                 "  \"organization\": \"NIOTH2015\",\n" +
                 "  \"guid\": \"b646c5a3-b873-4910-a1ee-53168daa3341\",\n" +
-                "  \"value\": "+temperature+",\n" +
-                "  \"sensorId\": \"bean3\",\n" +
+                "  \"value\": " + temperature + ",\n" +
+                "  \"sensorId\": \"" + sensorId + "\",\n" +
                 "  \"modCamId\": \"A2\"\n" +
                 "}";
         int qos = 2;
-        String broker = "tcp://mqtt.dev.mikael.io:1883";
-        String clientId = "AffectoO";
+        String broker = "tcp://heatnix.cloudapp.net";
+        String clientId = "Device";
         MemoryPersistence persistence = new MemoryPersistence();
 
         try {
@@ -175,5 +149,4 @@ public class MainActivity extends ActionBarActivity {
             me.printStackTrace();
         }
     }
-
 }
